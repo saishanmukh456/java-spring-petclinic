@@ -103,7 +103,7 @@ pipeline {
             echo 'SUCCESS: Build, tests, SonarQube analysis, SSH authentication, and deployment completed.'
         }
         failure {
-            echo 'FAILED: Check Console Output to identify the failed stage.'
+            echo 'FAILED: Check Console Output to identify the failed stage and should be deployed.'
         }
     }
 }
