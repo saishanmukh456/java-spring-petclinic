@@ -45,7 +45,7 @@ pipeline {
                             -o BatchMode=yes \
                             -o StrictHostKeyChecking=yes \
                             -o ConnectTimeout=10 \
-                            "$SSH_USER@44.201.134.73" \
+                            "$SSH_USER@54.164.62.109" \
                             'echo SSH_OK'
                     '''
                 }
@@ -82,13 +82,13 @@ pipeline {
                             -o StrictHostKeyChecking=yes \
                             -o ConnectTimeout=10 \
                             "$JAR_FILE" \
-                            "$SSH_USER@44.201.134.73:/home/deploy/app.jar"
+                            "$SSH_USER@54.164.62.109:/home/deploy/app.jar"
 
                         ssh -i "$SSH_KEY" \
                             -o BatchMode=yes \
                             -o StrictHostKeyChecking=yes \
                             -o ConnectTimeout=10 \
-                            "$SSH_USER@44.201.134.73" \
+                            "$SSH_USER@54.164.62.109" \
                             'sudo /usr/local/sbin/deploy-petclinic'
 
                         echo "Deployment command completed."
