@@ -100,53 +100,54 @@ pipeline {
 
         stage('Post-Deployment Verification') {
             steps {
-                script {
-                    withCredentials([
-                        sshUserPrivateKey(
-                            credentialsId: 'petclinic-deploy-key',
-                            keyFileVariable: 'SSH_KEY',
-                            usernameVariable: 'SSH_USER'
-                        )
-                    ]) {
-                        sh '''
-                            set -eu
+                withCredentials([
+                    sshUserPrivateKey(
+                        credentialsId: 'petclinic-deploy-key',
+                        keyFileVariable: 'SSH_KEY',
+                        usernameVariable: 'SSH_USER'
+                    )
+                ]) {
+                    sh '''
+                        set -eu
 
-                            echo "Checking application service status..."
+                        echo "Checking application service status..."
 
-                            ssh -i "$SSH_KEY" \
-                                -o BatchMode=yes \
-                                -o StrictHostKeyChecking=yes \
-                                -o ConnectTimeout=10 \
-                                "$SSH_USER@54.164.62.109" \
-                                'sudo systemctl is-active --quiet petclinic.service'
+                        ssh -i "$SSH_KEY" \
+                            -o BatchMode=yes \
+                            -o StrictHostKeyChecking=yes \
+                            -o ConnectTimeout=10 \
+                            "$SSH_USER@54.164.62.109" \
+                            'sudo systemctl is-active --quiet petclinic.service'
 
-                            echo "Service is active."
+                        echo "Service is active."
 
-                            echo "Checking application health endpoint..."
+                        echo "Checking application health endpoint..."
 
-                            ATTEMPTS=12
-                            COUNT=1
+                        APP_HEALTH_URL="http:"'//54.164.62.109:8080/actuator/health'
 
-                            while [ "$COUNT" -le "$ATTEMPTS" ]; do
-                                if RESPONSE="$(curl --silent --show-error \
-                                    --fail --max-time 10 \
-                                    http://54.164.62.109:8080/actuator/health 2>/dev/null)" \
-                                    && printf '%s' "$RESPONSE" | grep -q '"status"[[:space:]]*:[[:space:]]*"UP"'; then
+                        ATTEMPTS=12
+                        COUNT=1
 
-                                    echo "Health response: $RESPONSE"
-                                    echo "SUCCESS: Petclinic is healthy after deployment."
-                                    exit 0
-                                fi
+                        while [ "$COUNT" -le "$ATTEMPTS" ]; do
+                            if RESPONSE="$(curl --silent --show-error \
+                                --fail --max-time 10 \
+                                "$APP_HEALTH_URL" 2>/dev/null)" \
+                                && printf '%s' "$RESPONSE" \
+                                    | grep -q '"status"[[:space:]]*:[[:space:]]*"UP"'; then
 
-                                echo "Health check attempt $COUNT/$ATTEMPTS failed; retrying in 5 seconds..."
-                                sleep 5
-                                COUNT=$((COUNT + 1))
-                            done
+                                echo "Health response: $RESPONSE"
+                                echo "SUCCESS: Petclinic is healthy after deployment."
+                                exit 0
+                            fi
 
-                            echo "ERROR: Petclinic health check failed after deployment."
-                            exit 1
-                        '''
-                    }
+                            echo "Health check attempt $COUNT/$ATTEMPTS failed; retrying in 5 seconds..."
+                            sleep 5
+                            COUNT=$((COUNT + 1))
+                        done
+
+                        echo "ERROR: Petclinic health check failed after deployment."
+                        exit 1
+                    '''
                 }
             }
         }
@@ -162,4 +163,3 @@ pipeline {
         }
     }
 }
-
