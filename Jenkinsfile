@@ -49,6 +49,8 @@ pipeline {
                     sh '''
                         set -eu
 
+                        echo "Testing SSH authentication..."
+
                         ssh -i "$SSH_KEY" \
                             -o BatchMode=yes \
                             -o StrictHostKeyChecking=yes \
@@ -75,8 +77,7 @@ pipeline {
                         JAR_FILE="target/spring-petclinic-4.0.0-SNAPSHOT.jar"
 
                         if [ ! -f "$JAR_FILE" ]; then
-                            echo "ERROR: Expected application JAR not found: $JAR_FILE"
-                            echo "Available JAR files:"
+                            echo "ERROR: Application JAR not found: $JAR_FILE"
                             find target -maxdepth 1 -type f -name "*.jar" -print
                             exit 1
                         fi
@@ -97,7 +98,7 @@ pipeline {
                             "$SSH_USER@54.164.62.109" \
                             'sudo /usr/local/sbin/deploy-petclinic'
 
-                        echo "Automatic deployment command completed."
+                        echo "Automatic deployment completed."
                     '''
                 }
             }
@@ -108,7 +109,7 @@ pipeline {
                 sh '''
                     set -eu
 
-                    APP_HEALTH_URL="http:"'//54.164.62.109:8080/actuator/health'
+                    APP_HEALTH_URL="http:"'//172.31.85.136:8080/actuator/health'
 
                     ATTEMPTS=12
                     COUNT=1
@@ -117,13 +118,13 @@ pipeline {
                         echo "Health check attempt $COUNT/$ATTEMPTS"
 
                         if RESPONSE="$(curl --silent --show-error \
-                            --fail --max-time 10 \
+                            --fail --connect-timeout 5 --max-time 10 \
                             "$APP_HEALTH_URL" 2>/dev/null)" \
                             && printf '%s' "$RESPONSE" \
                                 | grep -q '"status"[[:space:]]*:[[:space:]]*"UP"'; then
 
                             echo "Health response: $RESPONSE"
-                            echo "SUCCESS: PetClinic is healthy."
+                            echo "SUCCESS: PetClinic is healthy after deployment."
                             exit 0
                         fi
 
@@ -134,7 +135,7 @@ pipeline {
                         COUNT=$((COUNT + 1))
                     done
 
-                    echo "ERROR: Application health verification failed."
+                    echo "ERROR: PetClinic health verification failed."
                     exit 1
                 '''
             }
@@ -147,7 +148,7 @@ pipeline {
         }
 
         failure {
-            echo 'FAILED: Check the first failed stage in Jenkins Console Output.'
+            echo 'FAILED: Check Console Output for the first failed stage.'
         }
     }
 }
