@@ -1,3 +1,4 @@
+
 pipeline {
     agent any
 
@@ -96,14 +97,69 @@ pipeline {
                 }
             }
         }
+
+        stage('Post-Deployment Verification') {
+            steps {
+                script {
+                    withCredentials([
+                        sshUserPrivateKey(
+                            credentialsId: 'petclinic-deploy-key',
+                            keyFileVariable: 'SSH_KEY',
+                            usernameVariable: 'SSH_USER'
+                        )
+                    ]) {
+                        sh '''
+                            set -eu
+
+                            echo "Checking application service status..."
+
+                            ssh -i "$SSH_KEY" \
+                                -o BatchMode=yes \
+                                -o StrictHostKeyChecking=yes \
+                                -o ConnectTimeout=10 \
+                                "$SSH_USER@54.164.62.109" \
+                                'sudo systemctl is-active --quiet petclinic.service'
+
+                            echo "Service is active."
+
+                            echo "Checking application health endpoint..."
+
+                            ATTEMPTS=12
+                            COUNT=1
+
+                            while [ "$COUNT" -le "$ATTEMPTS" ]; do
+                                if RESPONSE="$(curl --silent --show-error \
+                                    --fail --max-time 10 \
+                                    http://54.164.62.109:8080/actuator/health 2>/dev/null)" \
+                                    && printf '%s' "$RESPONSE" | grep -q '"status"[[:space:]]*:[[:space:]]*"UP"'; then
+
+                                    echo "Health response: $RESPONSE"
+                                    echo "SUCCESS: Petclinic is healthy after deployment."
+                                    exit 0
+                                fi
+
+                                echo "Health check attempt $COUNT/$ATTEMPTS failed; retrying in 5 seconds..."
+                                sleep 5
+                                COUNT=$((COUNT + 1))
+                            done
+
+                            echo "ERROR: Petclinic health check failed after deployment."
+                            exit 1
+                        '''
+                    }
+                }
+            }
+        }
     }
 
     post {
         success {
-            echo 'SUCCESS: Build, tests, SonarQube analysis, SSH authentication, and deployment completed.'
+            echo 'SUCCESS: Build, tests, SonarQube analysis, SSH authentication, automatic deployment, and post-deployment verification completed.'
         }
+
         failure {
-            echo 'FAILED: Check Console Output to identify the failed stage and should be deployed.'
+            echo 'FAILED: One or more pipeline stages failed. Check Console Output to identify the issue.'
         }
     }
 }
+
