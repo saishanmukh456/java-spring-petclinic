@@ -34,8 +34,7 @@ pipeline {
                         mvn -B \
                           org.sonarsource.scanner.maven:sonar-maven-plugin:5.8.0.7211:sonar \
                           -Dsonar.projectKey=spring-petclinic \
-                          -Dsonar.projectName="Spring PetClinic" \
-                          -Dsonar.host.url=http://172.31.24.217:9000
+                          -Dsonar.projectName="Spring PetClinic"
                     '''
                 }
             }
