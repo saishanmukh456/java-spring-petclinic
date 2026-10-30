@@ -9,6 +9,7 @@ pipeline {
     }
 
     stages {
+
         stage('Checkout Code') {
             steps {
                 git branch: 'main',
@@ -37,6 +38,20 @@ pipeline {
             }
         }
 
+        stage('SonarQube Quality Gate') {
+            steps {
+                timeout(time: 10, unit: 'MINUTES') {
+                    script {
+                        def qualityGate = waitForQualityGate(
+                            abortPipeline: true
+                        )
+
+                        echo "Quality Gate Status: ${qualityGate.status}"
+                    }
+                }
+            }
+        }
+
         stage('Test SSH Authentication') {
             steps {
                 withCredentials([
@@ -55,7 +70,7 @@ pipeline {
                             -o BatchMode=yes \
                             -o StrictHostKeyChecking=yes \
                             -o ConnectTimeout=10 \
-                            "$SSH_USER@54.164.62.109" \
+                            "$SSH_USER@44.211.77.161" \
                             'echo SSH_OK'
                     '''
                 }
@@ -89,13 +104,13 @@ pipeline {
                             -o StrictHostKeyChecking=yes \
                             -o ConnectTimeout=10 \
                             "$JAR_FILE" \
-                            "$SSH_USER@54.164.62.109:/home/deploy/app.jar"
+                            "$SSH_USER@44.211.77.161:/home/deploy/app.jar"
 
                         ssh -i "$SSH_KEY" \
                             -o BatchMode=yes \
                             -o StrictHostKeyChecking=yes \
                             -o ConnectTimeout=10 \
-                            "$SSH_USER@54.164.62.109" \
+                            "$SSH_USER@44.211.77.161" \
                             'sudo /usr/local/sbin/deploy-petclinic'
 
                         echo "Automatic deployment completed."
@@ -106,45 +121,62 @@ pipeline {
 
         stage('Post-Deployment Verification') {
             steps {
-                sh '''
-                    set -eu
+                withCredentials([
+                    sshUserPrivateKey(
+                        credentialsId: 'petclinic-deploy-key',
+                        keyFileVariable: 'SSH_KEY',
+                        usernameVariable: 'SSH_USER'
+                    )
+                ]) {
+                    sh '''
+                        set -eu
 
-                    APP_HEALTH_URL="http:"'//172.31.85.136:8080/actuator/health'
+                        echo "Checking application health on app server..."
 
-                    ATTEMPTS=12
-                    COUNT=1
+                        ssh -i "$SSH_KEY" \
+                            -o BatchMode=yes \
+                            -o StrictHostKeyChecking=yes \
+                            -o ConnectTimeout=10 \
+                            "$SSH_USER@44.211.77.161" \
+                            '
+                                set -eu
 
-                    while [ "$COUNT" -le "$ATTEMPTS" ]; do
-                        echo "Health check attempt $COUNT/$ATTEMPTS"
+                                ATTEMPTS=12
+                                COUNT=1
 
-                        if RESPONSE="$(curl --silent --show-error \
-                            --fail --connect-timeout 5 --max-time 10 \
-                            "$APP_HEALTH_URL" 2>/dev/null)" \
-                            && printf '%s' "$RESPONSE" \
-                                | grep -q '"status"[[:space:]]*:[[:space:]]*"UP"'; then
+                                while [ "$COUNT" -le "$ATTEMPTS" ]; do
+                                    echo "Health check attempt $COUNT/$ATTEMPTS"
 
-                            echo "Health response: $RESPONSE"
-                            echo "SUCCESS: PetClinic is healthy after deployment."
-                            exit 0
-                        fi
+                                    if RESPONSE=$(curl --silent --show-error \
+                                        --fail --connect-timeout 5 --max-time 10 \
+                                        http://localhost:8080/actuator/health 2>/dev/null) \
+                                        && printf "%s" "$RESPONSE" \
+                                        | grep -q "\"status\"[[:space:]]*:[[:space:]]*\"UP\""; then
 
-                        if [ "$COUNT" -lt "$ATTEMPTS" ]; then
-                            sleep 5
-                        fi
+                                        echo "Health response: $RESPONSE"
+                                        echo "SUCCESS: PetClinic is healthy."
+                                        exit 0
+                                    fi
 
-                        COUNT=$((COUNT + 1))
-                    done
+                                    if [ "$COUNT" -lt "$ATTEMPTS" ]; then
+                                        sleep 5
+                                    fi
 
-                    echo "ERROR: PetClinic health verification failed."
-                    exit 1
-                '''
+                                    COUNT=$((COUNT + 1))
+                                done
+
+                                echo "ERROR: PetClinic health verification failed."
+                                exit 1
+                            '
+                    '''
+                }
             }
         }
     }
 
     post {
         success {
-            echo 'SUCCESS: Build, tests, SonarQube analysis, SSH authentication, automatic deployment, and health verification completed.'
+            echo 'SUCCESS: Build, tests, SonarQube analysis, Quality Gate, automatic deployment, and health verification completed.'
         }
 
         failure {
@@ -152,3 +184,4 @@ pipeline {
         }
     }
 }
+
